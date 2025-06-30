@@ -1,50 +1,62 @@
 let alarmName = 'poll';
 
-// Start/stop messages from popup.js
-chrome.runtime.onMessage.addListener(function(message) {
-  if (message.action === 'start') {
+chrome.runtime.onMessage.addListener(({ action, interval }) => {
+  if (action === 'start') {
     chrome.alarms.clear(alarmName);
-    chrome.alarms.create(alarmName, { periodInMinutes: message.interval / 60 });
-  } else if (message.action === 'stop') {
+    chrome.alarms.create(alarmName, { periodInMinutes: interval / 60 });
+  } else if (action === 'stop') {
     chrome.alarms.clear(alarmName);
   }
 });
 
-// On each alarm tick, query the active tab for availability text
-chrome.alarms.onAlarm.addListener(function(alarm) {
-  if (alarm.name !== alarmName) return;
+chrome.alarms.onAlarm.addListener(() => {
+  chrome.storage.local.get(['urls'], ({ urls }) => {
+    if (!urls || !urls.length) return;
+    let labels = [];
 
-  chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-    if (!tabs[0]) return;
+    urls.forEach((url) => {
+      chrome.tabs.create({ url, active: false }, (tab) => {
+        setTimeout(() => {
+          chrome.tabs.executeScript(tab.id, {
+            code: `
+              (() => {
+                const availability = document.querySelector('.availability, .class-status')?.textContent.trim();
+                const title = document.querySelector('h1')?.textContent.trim();
+                const dateText = document.querySelector('.occurrence-date, .occurrenceDate, .date')?.textContent.trim();
 
-    checkAvailabilityOnTab(tabs[0].id, function(status) {
-      // Update the popup UI
-      chrome.runtime.sendMessage({ lastChecked: Date.now() });
+                function parseDateToWeekday(dateStr) {
+                  const parts = dateStr?.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);
+                  if (!parts) return null;
+                  const [_, day, month, year] = parts;
+                  const date = new Date(\`\${year}-\${month}-\${day}\`);
+                  return date.toLocaleDateString('en-US', { weekday: 'long' });
+                }
 
-      // If not “Full”, notify + stop
-      if (!/full/i.test(status)) {
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icon.png',
-          title: '🥳 Spot Open!',
-          message: `Status: ${status}`
-        });
-        chrome.alarms.clear(alarmName);
-      }
+                const dayOfWeek = parseDateToWeekday(dateText);
+                const timeMatch = title?.match(/\\(([^)]+)\\)/)?.[1] || '';
+                return {
+                  availability: availability || '',
+                  label: \`\${title?.split('(')[0].trim() || 'Unknown'} - \${dayOfWeek || 'Unknown'} - (\${timeMatch})\`
+                };
+              })();
+            `
+          }, (results) => {
+            const { availability, label } = results?.[0] || {};
+            labels.push(label);
+            chrome.runtime.sendMessage({ lastChecked: Date.now(), labels });
+
+            if (availability && !/full/i.test(availability)) {
+              chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'icon.png',
+                title: '🏸 Spot Open!',
+                message: `${label}\nStatus: ${availability}`
+              });
+            }
+            chrome.tabs.remove(tab.id);
+          });
+        }, 3000); // wait for page to load
+      });
     });
   });
 });
-
-// Helper that runs code in the page to grab the availability text
-function checkAvailabilityOnTab(tabId, callback) {
-  chrome.tabs.executeScript(tabId, {
-    code: `
-      (() => {
-        const el = document.querySelector('.availability, .class-status');
-        return el ? el.textContent.trim() : '';
-      })();
-    `
-  }, function(results) {
-    callback(results && results[0] ? results[0] : '');
-  });
-}

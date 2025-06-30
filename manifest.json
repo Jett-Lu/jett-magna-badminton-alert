@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Jett's Magna Badminton Alert",
-  "version": "1.2",
-  "description": "Monitors your current Magna Badminton class page and notifies you when any spot opens.",
+  "version": "1.3",
+  "description": "Monitors multiple Magna badminton class pages and alerts you with weekday/session info when spots open.",
   "permissions": [
     "storage",
     "alarms",
