@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magna Badminton Alert</title><link rel="stylesheet" href="popup.css"></head><body>
+<div class="container">
+<h1>Magna Badminton Alert</h1>
+<div class="form-group">
+<label for="interval">Check interval (seconds):</label>
+<input type="number" id="interval" min="10" value="60">
+</div>
+<div class="button-group">
+<button id="startMonitoring" class="primary">Start</button>
+<button id="stopMonitoring">Stop</button>
+</div>
+<div class="status-container">
+<div id="status" class="status">Not monitoring</div>
+<div id="lastChecked" class="last-checked"></div>
+</div></div>
+<script src="popup.js"></script></body></html>

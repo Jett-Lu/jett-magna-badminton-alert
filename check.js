@@ -5,30 +5,32 @@
   let intervalId;
   const audio = new Audio(RING_SRC);
 
-  // 1) Inject a status badge
+  // Inject a small status badge
   function createBadge() {
     const badge = document.createElement('div');
     badge.id = 'badminton-status-badge';
-    badge.style.position        = 'fixed';
-    badge.style.top             = '10px';
-    badge.style.right           = '10px';
-    badge.style.padding         = '6px 12px';
-    badge.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    badge.style.color           = 'white';
-    badge.style.fontSize        = '14px';
-    badge.style.borderRadius    = '4px';
-    badge.style.zIndex          = 9999;
+    Object.assign(badge.style, {
+      position: 'fixed',
+      top: '10px',
+      right: '10px',
+      padding: '6px 12px',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      color: 'white',
+      fontSize: '14px',
+      borderRadius: '4px',
+      zIndex: 9999
+    });
     badge.textContent = '🏸 Monitoring…';
     document.body.appendChild(badge);
   }
 
-  // 2) Update badge text
+  // Update that badge’s text
   function updateBadge(text) {
     const badge = document.getElementById('badminton-status-badge');
     if (badge) badge.textContent = text;
   }
 
-  // Unified notification helper
+  // Fire desktop notifications
   function sendNotification(title, message) {
     if (Notification.permission === 'granted') {
       new Notification(title, { body: message, icon: ICON_SRC });
@@ -41,7 +43,7 @@
     }
   }
 
-  // One-time “started” alert
+  // “Started” alert
   function notifyStarted() {
     sendNotification(
       "🏸 Jett’s Magna Badminton Alert",
@@ -49,13 +51,13 @@
     );
   }
 
-  // Alert when spot opens
+  // “Open!” alert
   function notifyOpen(statusText) {
     sendNotification("🏸 Spot Open!", `Status: ${statusText}`);
     audio.play();
   }
 
-  // Core check: anything other than “Full” triggers notifyOpen
+  // The polling check
   function checkAvailability() {
     const elem = document.querySelector('.availability, .class-status');
     if (!elem) {
@@ -72,14 +74,18 @@
     }
   }
 
-  // Kick things off once the page’s DOM is ready
+  // Wire it all up on DOMContentLoaded
   document.addEventListener('DOMContentLoaded', () => {
     createBadge();
-
-    // Fire the startup notification
+    // Ask for notification rights and send the “started” ping
     if (Notification.permission === 'granted') {
       notifyStarted();
     } else {
       Notification.requestPermission().then(p => {
         if (p === 'granted') notifyStarted();
       });
+    }
+    checkAvailability();
+    intervalId = setInterval(checkAvailability, INTERVAL_MS);
+  });
+})();
