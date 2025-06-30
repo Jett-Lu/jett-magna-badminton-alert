@@ -1,5 +1,6 @@
 const startBtn      = document.getElementById('start');
 const stopBtn       = document.getElementById('stop');
+const removeAllBtn  = document.getElementById('removeAll');
 const intervalInput = document.getElementById('interval');
 const linkInput     = document.getElementById('linkInput');
 const addBtn        = document.getElementById('add');
@@ -7,6 +8,13 @@ const monitorCount  = document.getElementById('monitorCount');
 const monitorList   = document.getElementById('monitorList');
 const statusEl      = document.getElementById('status');
 const lastCheckedEl = document.getElementById('lastChecked');
+const errorEl       = document.getElementById('error');
+
+function showError(msg) {
+  errorEl.textContent = msg;
+  errorEl.style.display = 'block';
+  setTimeout(() => { errorEl.style.display = 'none'; }, 3000);
+}
 
 function renderList(urls) {
   monitorCount.textContent = `Now monitoring (${urls.length}/4):`;
@@ -28,16 +36,10 @@ function updateUI() {
   chrome.storage.local.get(['urls','active','interval'], ({ urls = [], active, interval }) => {
     renderList(urls);
     intervalInput.value = interval || 60;
-    if (active) {
-      startBtn.disabled = true;
-      stopBtn.disabled  = false;
-      statusEl.textContent = 'Monitoring...';
-    } else {
-      startBtn.disabled = false;
-      stopBtn.disabled  = true;
-      statusEl.textContent = 'Not monitoring';
-      lastCheckedEl.textContent = '';
-    }
+    startBtn.disabled = active;
+    stopBtn.disabled  = !active;
+    statusEl.textContent = active ? 'Monitoring...' : 'Not monitoring';
+    lastCheckedEl.textContent = '';
   });
 }
 
@@ -46,11 +48,11 @@ function addUrl() {
   if (!url) return;
   chrome.storage.local.get('urls', ({ urls = [] }) => {
     if (urls.length >= 4) {
-      alert('Limit is 4 links.');
+      showError('Limit is 4 links.');
       return;
     }
     if (urls.includes(url)) {
-      alert('Already monitoring this link.');
+      showError('Already monitoring this link.');
       return;
     }
     urls.push(url);
@@ -68,12 +70,17 @@ function removeUrl(index) {
   });
 }
 
+function removeAll() {
+  chrome.storage.local.set({ urls: [] }, () => renderList([]));
+}
+
 addBtn.addEventListener('click', addUrl);
+removeAllBtn.addEventListener('click', removeAll);
 
 startBtn.addEventListener('click', () => {
   const interval = parseInt(intervalInput.value, 10);
   if (isNaN(interval) || interval < 10) {
-    alert('Enter interval ≥ 10s');
+    showError('Enter interval ≥10s');
     return;
   }
   chrome.storage.local.set({ active:true, interval }, () => {
