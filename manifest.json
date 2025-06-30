@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Jett's Magna Badminton Alert",
+  "version": "1.1",
+  "description": "Monitors your current Magna badminton class page and rings when a spot opens.",
+  "permissions": [
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://newmarket.perfectmind.com/Clients/BookMe4LandingPages/Class*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://newmarket.perfectmind.com/Clients/BookMe4LandingPages/Class*"
+      ],
+      "js": [
+        "check.js"
+      ]
+    }
+  ],
+  "icons": {
+    "128": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ring.mp3"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
