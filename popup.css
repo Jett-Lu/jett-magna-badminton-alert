@@ -21,9 +21,15 @@ input[type="text"] {
   margin-top: 4px;
   font-size: 13px;
 }
-#add {
+#add, #removeAll {
   margin-top: 4px;
   width: 100%;
+}
+.error {
+  min-height: 1.2em;
+  color: #c00;
+  margin-top: 6px;
+  font-size: 12px;
 }
 #monitorSection {
   margin: 10px 0;
