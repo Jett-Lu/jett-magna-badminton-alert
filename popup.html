@@ -8,27 +8,24 @@
 <body>
   <h2>Magna Badminton Alert</h2>
 
-  <label for="interval">Check interval (sec):</label>
-  <input type="number" id="interval" min="10" value="60">
+  <label for="interval">Check interval (min):</label>
+  <input type="number" id="interval" min="1" value="1">
 
   <label for="linkInput">Enter class link:</label>
   <input type="text" id="linkInput" placeholder="Paste URL here">
-  <button id="add">➕ Add</button>
-  <button id="removeAll">🗑️ Remove All</button>
-  <div id="error" class="error"></div>
 
-  <div id="monitorSection">
-    <div id="monitorCount">Now monitoring (0/4):</div>
-    <ul id="monitorList"></ul>
+  <button id="add">Add</button>
+  <button id="removeAll">Remove All</button>
+<div id="monitorCount"></div>
+  <div id="links"></div>
+
+  <div style="margin-top: 10px;">
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
   </div>
 
-  <div class="btns">
-    <button id="start">▶️ Start</button>
-    <button id="stop" disabled>⏹ Stop</button>
-  </div>
-
-  <div id="status">Not monitoring</div>
-  <div id="lastChecked"></div>
+  <p id="status">Monitoring: OFF</p>
+  <p id="lastChecked">Never</p>
 
   <script src="popup.js"></script>
 </body>

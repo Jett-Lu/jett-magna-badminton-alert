@@ -5,123 +5,158 @@ const linkInput     = document.getElementById('linkInput');
 const addBtn        = document.getElementById('add');
 const removeAllBtn  = document.getElementById('removeAll');
 const monitorCount  = document.getElementById('monitorCount');
-const monitorList   = document.getElementById('monitorList');
-const statusEl      = document.getElementById('status');
-const lastCheckedEl = document.getElementById('lastChecked');
-const errorEl       = document.getElementById('error');
+const linksDiv      = document.getElementById('links');
+const statusP       = document.getElementById('status');
+const lastCheckedP  = document.getElementById('lastChecked');
 
-function showError(msg) {
-  errorEl.textContent = msg;
-  errorEl.style.display = 'block';
-  setTimeout(() => {
-    errorEl.style.display = 'none';
-  }, 3000);
+const api = (typeof browser !== 'undefined') ? browser : chrome;
+
+function renderState(state) {
+  const links = state.links || [];
+  const labels = state.labels || {};
+  const active = !!state.active;
+  const lastChecked = state.lastChecked ? new Date(state.lastChecked).toLocaleString() : 'Never';
+
+  monitorCount.textContent = `Now monitoring (${links.length}/4):`;
+  linksDiv.innerHTML = '';
+
+  links.forEach(url => {
+    const row = document.createElement('div');
+    const label = labels[url] || 'Unknown';
+
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px';
+    row.style.margin = '4px 0';
+
+    const text = document.createElement('div');
+    text.textContent = label;
+    text.style.flex = '1';
+    text.style.fontSize = '12px';
+    text.style.whiteSpace = 'nowrap';
+    text.style.overflow = 'hidden';
+    text.style.textOverflow = 'ellipsis';
+    text.title = url;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.style.flex = '0 0 auto';
+    removeBtn.addEventListener('click', () => removeLink(url));
+
+    row.appendChild(text);
+    row.appendChild(removeBtn);
+    linksDiv.appendChild(row);
+  });
+
+  statusP.textContent = `Monitoring: ${active ? 'ON' : 'OFF'}`;
+  lastCheckedP.textContent = lastChecked;
+
+  intervalInput.value = (state.intervalMinutes || 1);
 }
 
-function renderList(labels) {
-  monitorCount.textContent = `Now monitoring (${labels.length}/4):`;
-  monitorList.innerHTML = '';
-  labels.forEach((lbl, i) => {
-    const li = document.createElement('li');
-    const span = document.createElement('span');
-    span.textContent = lbl;
-    const btn = document.createElement('button');
-    btn.textContent = '✕';
-    btn.addEventListener('click', () => removeUrl(i));
-    li.appendChild(span);
-    li.appendChild(btn);
-    monitorList.appendChild(li);
+function loadState() {
+  api.storage.local.get(['links','labels','active','intervalMinutes','lastChecked'], (state) => {
+    renderState(state || {});
   });
 }
 
-function refreshLabels(callback) {
-  chrome.storage.local.get('urls', ({ urls = [] }) => {
-    if (!urls.length) {
-      renderList([]);
-      return;
-    }
-    chrome.runtime.sendMessage(
-      { action: 'getLabels', urls },
-      response => {
-        renderList(response.labels || []);
-        if (typeof callback === 'function') callback();
-      }
-    );
-  });
+function saveIntervalMinutes() {
+  const minutes = Math.max(1, parseInt(intervalInput.value || '1', 10));
+  intervalInput.value = minutes;
+  api.storage.local.set({ intervalMinutes: minutes });
 }
 
-function updateUI() {
-  chrome.storage.local.get(['urls', 'active', 'interval'], ({ urls = [], active, interval }) => {
-    intervalInput.value = interval || 60;
-    startBtn.disabled = active;
-    stopBtn.disabled = !active;
-    statusEl.textContent = active ? 'Monitoring...' : 'Not monitoring';
-    lastCheckedEl.textContent = '';
-    refreshLabels();
-  });
-}
-
-function addUrl() {
-  const url = linkInput.value.trim();
+function addLink() {
+  const url = (linkInput.value || '').trim();
   if (!url) return;
-  chrome.storage.local.get('urls', ({ urls = [] }) => {
-    if (urls.length >= 4) {
-      showError('Limit is 4 links.');
+
+  api.storage.local.get(['links'], (data) => {
+    const links = data.links || [];
+    if (links.includes(url)) return;
+
+    if (links.length >= 4) {
+      alert('Maximum 4 links allowed.');
       return;
     }
-    if (urls.includes(url)) {
-      showError('Already monitored.');
-      return;
-    }
-    urls.push(url);
-    chrome.storage.local.set({ urls }, () => {
+
+    links.push(url);
+    api.storage.local.set({ links }, () => {
       linkInput.value = '';
-      refreshLabels();
+      loadState();
     });
   });
 }
 
-function removeUrl(index) {
-  chrome.storage.local.get('urls', ({ urls = [] }) => {
-    urls.splice(index, 1);
-    chrome.storage.local.set({ urls }, () => {
-      refreshLabels();
-    });
+function removeLink(url) {
+  api.storage.local.get(['links','labels','lastOpenByUrl'], (data) => {
+    const links = (data.links || []).filter(u => u !== url);
+    const labels = data.labels || {};
+    const lastOpenByUrl = data.lastOpenByUrl || {};
+    delete labels[url];
+    delete lastOpenByUrl[url];
+
+    api.storage.local.set({ links, labels, lastOpenByUrl }, () => loadState());
   });
 }
 
 function removeAll() {
-  chrome.storage.local.set({ urls: [] }, () => {
-    refreshLabels();
+  api.storage.local.set({ links: [], labels: {}, lastOpenByUrl: {} }, () => loadState());
+}
+
+function startMonitoring() {
+  saveIntervalMinutes();
+  api.storage.local.set({ active: true }, () => {
+    api.runtime.sendMessage({ type: 'start' }, () => loadState());
   });
 }
 
-addBtn.addEventListener('click', addUrl);
+function stopMonitoring() {
+  api.storage.local.set({ active: false }, () => {
+    api.runtime.sendMessage({ type: 'stop' }, () => loadState());
+  });
+}
+
+intervalInput.addEventListener('change', saveIntervalMinutes);
+addBtn.addEventListener('click', addLink);
 removeAllBtn.addEventListener('click', removeAll);
+startBtn.addEventListener('click', startMonitoring);
+stopBtn.addEventListener('click', stopMonitoring);
 
-startBtn.addEventListener('click', () => {
-  const interval = parseInt(intervalInput.value, 10);
-  if (isNaN(interval) || interval < 10) {
-    showError('Interval must be at least 10 seconds.');
-    return;
+loadState();
+api.storage.onChanged.addListener(loadState);
+
+
+});
+
+
+function updateStartStopVisibility(isActive) {
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  if (!startBtn || !stopBtn) return;
+
+  if (isActive) {
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'inline-block';
+  } else {
+    stopBtn.style.display = 'none';
+    startBtn.style.display = 'inline-block';
   }
-  chrome.storage.local.set({ active: true, interval }, () => {
-    chrome.runtime.sendMessage({ action: 'start', interval });
-    updateUI();
+}
+
+function refreshActiveUI() {
+  api.storage.local.get(['active'], (data) => {
+    updateStartStopVisibility(!!data.active);
   });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  refreshActiveUI();
 });
 
-stopBtn.addEventListener('click', () => {
-  chrome.storage.local.set({ active: false }, () => {
-    chrome.runtime.sendMessage({ action: 'stop' });
-    updateUI();
-  });
+document.getElementById('start')?.addEventListener('click', () => {
+  updateStartStopVisibility(true);
 });
-
-chrome.runtime.onMessage.addListener(msg => {
-  if (msg.lastChecked) {
-    lastCheckedEl.textContent = `Last checked: ${new Date(msg.lastChecked).toLocaleTimeString()}`;
-  }
+document.getElementById('stop')?.addEventListener('click', () => {
+  updateStartStopVisibility(false);
 });
-
-document.addEventListener('DOMContentLoaded', updateUI);

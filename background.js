@@ -1,120 +1,283 @@
 // background.js
 
-let alarmName = 'poll';
+const api = (typeof browser !== 'undefined') ? browser : chrome;
+const alarmName = 'poll';
 
-// Reset monitoring state on install or startup
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ active: false });
-  chrome.alarms.clear(alarmName);
-  chrome.browserAction.setBadgeText({ text: '' });
-});
-chrome.runtime.onStartup.addListener(() => {
-  chrome.storage.local.set({ active: false });
-  chrome.alarms.clear(alarmName);
-  chrome.browserAction.setBadgeText({ text: '' });
-});
+let ringAudio = null;
 
-// Handle messages from popup.js
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === 'start') {
-    chrome.alarms.clear(alarmName);
-    chrome.alarms.create(alarmName, { periodInMinutes: msg.interval / 60 });
-    chrome.browserAction.setBadgeText({ text: 'ON' });
-  }
-  else if (msg.action === 'stop') {
-    chrome.alarms.clear(alarmName);
-    chrome.browserAction.setBadgeText({ text: '' });
-  }
-  else if (msg.action === 'getLabels') {
-    scrapeAll(msg.urls, labels => sendResponse({ labels }));
-    return true;  // keep message channel open
-  }
-});
+function startRing() {
+  try {
+    if (!ringAudio) {
+      ringAudio = new Audio(api.runtime.getURL('audio.mp3'));
+      ringAudio.loop = true;
+    }
+    ringAudio.currentTime = 0;
+    ringAudio.play().catch(() => {});
+  } catch (e) {}
+}
 
-// On each alarm, re-scrape and notify popup + on-open
-chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name !== alarmName) return;
-  chrome.storage.local.get('urls', ({ urls = [] }) => {
-    scrapeAll(urls, labels => {
-      chrome.runtime.sendMessage({ lastChecked: Date.now(), labels });
-    }, true);
+function stopRing() {
+  try {
+    if (ringAudio) {
+      ringAudio.pause();
+      ringAudio.currentTime = 0;
+    }
+  } catch (e) {}
+}
+
+
+function setOnBadge(isOn) {
+  const text = isOn ? 'ON' : '';
+  api.browserAction.setBadgeText({ text });
+  if (isOn) {
+    api.browserAction.setBadgeBackgroundColor({ color: '#d40000' });
+  }
+}
+
+function syncBadgeFromStorage() {
+  api.storage.local.get(['active'], (data) => {
+    setOnBadge(!!data.active);
+  });
+}
+
+function ensureDefaults(cb) {
+  api.storage.local.get(['links','labels','active','intervalMinutes','lastOpenByUrl'], (data) => {
+    const updates = {};
+    if (!Array.isArray(data.links)) updates.links = [];
+    if (!data.labels || typeof data.labels !== 'object') updates.labels = {};
+    if (typeof data.active !== 'boolean') updates.active = false;
+    if (!Number.isInteger(data.intervalMinutes) || data.intervalMinutes < 1) updates.intervalMinutes = 1;
+    if (!data.lastOpenByUrl || typeof data.lastOpenByUrl !== 'object') updates.lastOpenByUrl = {};
+    if (Object.keys(updates).length) {
+      api.storage.local.set(updates, () => cb && cb());
+    } else {
+      cb && cb();
+    }
+  });
+}
+
+function createOrUpdateAlarm() {
+  api.storage.local.get(['active','intervalMinutes'], (data) => {
+    if (!data.active) return;
+    const minutes = Math.max(1, parseInt(data.intervalMinutes || 1, 10));
+    api.alarms.create(alarmName, { periodInMinutes: minutes });
+  });
+}
+
+api.runtime.onInstalled.addListener(() => {
+  ensureDefaults(() => {
+    api.alarms.clear(alarmName);
+    syncBadgeFromStorage();
   });
 });
-
-/**
- * Opens each URL in a hidden tab, scrapes the page for:
- *  • Title via <h1 class="bm-course-primary-event-name">
- *  • Date via <span aria-label^="Event date">
- *  • Time via <span aria-label^="Event time">
- *  • Availability via <label class="spots"><span>…</span>
- * Converts the date to weekday, builds "Title – Weekday – (Time)" labels,
- * optionally notifies, then closes the tab.
- */
-function scrapeAll(urls, cb, notifyOnOpen = false) {
-  let done = 0;
-  const labels = [];
-
-  if (!urls.length) {
-    cb(labels);
-    return;
+api.runtime.onStartup.addListener(() => {
+  ensureDefaults(() => {
+    api.alarms.clear(alarmName, () => createOrUpdateAlarm());
+    syncBadgeFromStorage();
+  });
+});
+api.runtime.onMessage.addListener((msg) => {
+  if (!msg || !msg.type) return;
+  if (msg.type === 'start') {
+    createOrUpdateAlarm();
+    setOnBadge(true);
+    checkLinks();
   }
+  if (msg.type === 'stop') {
+    api.alarms.clear(alarmName);
+    setOnBadge(false);
+    stopRing();
+  }
+});
 
-  urls.forEach(url => {
-    chrome.tabs.create({ url, active: false }, tab => {
-      // wait for the page to load
-      setTimeout(() => {
-        chrome.tabs.executeScript(tab.id, {
-          code: '(' + function() {
-            // 1) Title
-            const h1 = document.querySelector('h1.bm-course-primary-event-name');
-            const title = h1 ? h1.textContent.trim() : '';
+api.alarms.onAlarm.addListener((alarm) => {
+  if (alarm && alarm.name === alarmName) {
+    pollAll();
+  }
+});
 
-            // 2) Date string (DD/MM/YYYY)
-            const dateSpan = document.querySelector('span[aria-label^="Event date"]');
-            const dateStr = dateSpan ? dateSpan.textContent.trim() : '';
+async function pollAll() {
+  ensureDefaults(() => {
+    api.storage.local.get(['links'], async (data) => {
+      const links = data.links || [];
+      if (!links.length) {
+        api.storage.local.set({ lastChecked: Date.now() });
+        return;
+      }
 
-            // 3) Time string
-            const timeSpan = document.querySelector('span[aria-label^="Event time"]');
-            const timeStr = timeSpan ? timeSpan.textContent.trim() : '';
+      for (const url of links) {
+        try {
+          await checkOne(url);
+        } catch (e) {
+          // swallow per-url errors
+        }
+      }
 
-            // 4) Availability
-            const spotSpan = document.querySelector('label.spots span');
-            const availability = spotSpan ? spotSpan.textContent.trim() : '';
-
-            // Convert DD/MM/YYYY to weekday name
-            function toWeekday(s) {
-              const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-              if (!m) return 'Unknown';
-              const d = new Date(`${m[3]}-${m[2]}-${m[1]}`);
-              return d.toLocaleDateString('en-US', { weekday: 'long' });
-            }
-
-            const weekday = toWeekday(dateStr);
-            const nameOnly = title.split('(')[0].trim();
-            const label = `${nameOnly} - ${weekday} - (${timeStr})`;
-
-            return { availability, label };
-          } + ')();'
-        }, results => {
-          done++;
-          const info = (results && results[0]) || { availability:'', label:'' };
-          if (info.label) {
-            labels.push(info.label);
-          }
-          if (notifyOnOpen && info.availability && !/full/i.test(info.availability)) {
-            chrome.notifications.create({
-              type: 'basic',
-              iconUrl: 'icon.png',
-              title: '🏸 Spot Open!',
-              message: `${info.label}\nStatus: ${info.availability}`
-            });
-          }
-          chrome.tabs.remove(tab.id);
-          if (done === urls.length) {
-            cb(labels);
-          }
-        });
-      }, 3000);
+      api.storage.local.set({ lastChecked: Date.now() });
     });
   });
 }
+
+function executeInTab(tabId, code) {
+  return new Promise((resolve, reject) => {
+    api.tabs.executeScript(tabId, { code }, (res) => {
+      const err = api.runtime.lastError;
+      if (err) return reject(err);
+      resolve(res && res[0]);
+    });
+  });
+}
+
+function waitForTabComplete(tabId, timeoutMs = 25000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+
+    function onUpdated(updatedTabId, info) {
+      if (updatedTabId !== tabId) return;
+      if (info.status === 'complete') {
+        api.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }
+    }
+
+    api.tabs.onUpdated.addListener(onUpdated);
+
+    const timer = setInterval(() => {
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(timer);
+        api.tabs.onUpdated.removeListener(onUpdated);
+        reject(new Error('tab load timeout'));
+      }
+    }, 500);
+  });
+}
+
+async function checkOne(url) {
+  const tab = await new Promise((resolve, reject) => {
+    api.tabs.create({ url, active: false }, (t) => {
+      const err = api.runtime.lastError;
+      if (err) return reject(err);
+      resolve(t);
+    });
+  });
+
+  try {
+    await waitForTabComplete(tab.id);
+
+    const scrapeFn = function () {
+      function waitFor(selector, timeout) {
+        timeout = timeout || 15000;
+        return new Promise((resolve, reject) => {
+          const start = Date.now();
+          const timer = setInterval(() => {
+            const el = document.querySelector(selector);
+            if (el) {
+              clearInterval(timer);
+              resolve(el);
+            }
+            if (Date.now() - start > timeout) {
+              clearInterval(timer);
+              reject('timeout');
+            }
+          }, 250);
+        });
+      }
+
+      function parseDdMmYyyy(s) {
+        if (!s) return null;
+        const parts = s.split('/');
+        if (parts.length !== 3) return null;
+        const dd = parts[0], mm = parts[1], yyyy = parts[2];
+        const d = new Date(`${yyyy}-${mm}-${dd}`);
+        if (isNaN(d.getTime())) return null;
+        return d;
+      }
+
+      return (async () => {
+        try {
+          await waitFor('h1.bm-course-primary-event-name', 15000);
+        } catch (e) {
+          // continue with fallbacks
+        }
+
+        const titleEl = document.querySelector('h1.bm-course-primary-event-name') ||
+                        document.querySelector('h1.bm-event-name-h1') ||
+                        document.querySelector('h1');
+
+        const dateEl = document.querySelector('span[aria-label^="Event date"]');
+
+        const title = (titleEl && titleEl.textContent || '').trim() || 'Unknown';
+        const dateStr = (dateEl && dateEl.textContent || '').trim() || '';
+        const d = parseDdMmYyyy(dateStr);
+        const weekday = d ? d.toLocaleDateString('en-CA', { weekday: 'long' }) : 'Unknown';
+
+        const bodyText = (document.body && document.body.innerText || '');
+
+        /*
+          Preferred signal: "1 spot(s) left" on PerfectMind pages.
+          Fallbacks: "Full", "Waitlist", and presence of purchase/registration actions.
+        */
+        let spotsLeft = null;
+        const spotMatch = bodyText.match(/(\d+)\s*spot\(s\)\s*left/i);
+        if (spotMatch) {
+          spotsLeft = parseInt(spotMatch[1], 10);
+        }
+
+        const lower = bodyText.toLowerCase();
+
+        let availability = 'Unknown';
+        if (Number.isInteger(spotsLeft)) {
+          availability = `Spots:${spotsLeft}`;
+        } else if (lower.includes('full')) {
+          availability = 'Full';
+        } else if (lower.includes('waitlist')) {
+          availability = 'Waitlist';
+        } else if (lower.includes('add to cart') || lower.includes('register') || lower.includes('add to basket')) {
+          availability = 'Open';
+        }
+
+        return { title, dateStr, weekday, availability, spotsLeft };
+      })();
+    };
+
+    const result = await executeInTab(tab.id, `(${scrapeFn.toString()})()`);
+
+    await new Promise((resolve) => api.tabs.remove(tab.id, () => resolve()));
+
+    const label = `${result.title} - ${result.weekday} (${result.dateStr || 'Unknown date'})`;
+    const isOpen = Number.isInteger(result.spotsLeft) ? (result.spotsLeft > 0) : (result.availability === 'Open');
+
+    await new Promise((resolve) => {
+      api.storage.local.get(['labels','lastOpenByUrl'], (data) => {
+        const labels = data.labels || {};
+        const lastOpenByUrl = data.lastOpenByUrl || {};
+
+        labels[url] = label;
+
+        const wasOpen = !!lastOpenByUrl[url];
+        lastOpenByUrl[url] = isOpen;
+
+        api.storage.local.set({ labels, lastOpenByUrl }, () => {
+          if (isOpen && !wasOpen) {
+            api.notifications.create({
+              type: 'basic',
+              iconUrl: 'icon.png',
+              title: 'Spots available',
+              message: Number.isInteger(result.spotsLeft) ? `${label} | ${result.spotsLeft} spot(s) left` : label
+            });
+              startRing();
+          }
+          resolve();
+        });
+      });
+    });
+
+  } catch (e) {
+    try { api.tabs.remove(tab.id); } catch (_) {}
+  }
+}
+
+
+api.notifications.onClicked.addListener(() => {
+  stopRing();
+});

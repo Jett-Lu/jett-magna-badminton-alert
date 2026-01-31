@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Jett's Magna Badminton Alert",
-  "version": "1.3",
-  "description": "Monitor up to 4 badminton class pages, get weekday/session alerts.",
+  "name": "Magna Badminton Alert",
+  "version": "2.4",
+  "description": "Monitor a PerfectMind class detail page and notify when a session becomes available.",
   "permissions": [
     "storage",
     "alarms",
@@ -11,7 +11,9 @@
     "https://newmarket.perfectmind.com/Clients/BookMe4LandingPages/Class*"
   ],
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "background.js"
+    ],
     "persistent": false
   },
   "browser_action": {
