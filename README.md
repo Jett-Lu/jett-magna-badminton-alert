@@ -2,7 +2,7 @@
 
 A lightweight browser extension that monitors your PerfectMind badminton class page and alerts you when a class is no longer full.
 
-<img width="289" height="325" alt="image" src="https://github.com/user-attachments/assets/eaac4769-633a-4b9a-8f0c-3bfa2b3077bf" />
+<img width="256" height="256" alt="icon" src="https://github.com/user-attachments/assets/f922e7c3-cf06-4346-a952-f575637a3e45" />
 
 ## What it does
 - Periodically checks your target PerfectMind class page
@@ -10,6 +10,9 @@ A lightweight browser extension that monitors your PerfectMind badminton class p
 - Plays a ring sound and shows a browser notification :contentReference
 
 ## Key features
+
+<img width="289" height="325" alt="image" src="https://github.com/user-attachments/assets/eaac4769-633a-4b9a-8f0c-3bfa2b3077bf" />
+
 - Simple popup UI (start/stop style workflow)
 - Audible alert (ring.mp3) plus browser notification
 - Designed for “set it and forget it” monitoring during booking windows :contentReference[oaicite:2]{index=2}
