@@ -1,6 +1,8 @@
 # Jett’s Magna Badminton Alert
 
-A lightweight browser extension that monitors your PerfectMind badminton class page and alerts you when a class is no longer full. :contentReference[oaicite:0]{index=0}
+A lightweight browser extension that monitors your PerfectMind badminton class page and alerts you when a class is no longer full.
+
+<img width="289" height="325" alt="image" src="https://github.com/user-attachments/assets/eaac4769-633a-4b9a-8f0c-3bfa2b3077bf" />
 
 ## What it does
 - Periodically checks your target PerfectMind class page
