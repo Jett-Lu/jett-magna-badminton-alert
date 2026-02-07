@@ -7,7 +7,7 @@ A lightweight browser extension that monitors your PerfectMind badminton class p
 ## What it does
 - Periodically checks your target PerfectMind class page
 - Detects when the page indicates the class is no longer “full”
-- Plays a ring sound and shows a browser notification :contentReference[oaicite:1]{index=1}
+- Plays a ring sound and shows a browser notification :contentReference
 
 ## Key features
 - Simple popup UI (start/stop style workflow)
@@ -37,7 +37,7 @@ Note: Firefox temporary add-ons reset after browser restart unless you package/s
 2. Click the extension icon to open the popup.
 3. Start monitoring.
 4. Leave the PerfectMind tab open (recommended) and keep your browser running.
-5. When the class becomes available, you should hear the ring and see a notification. :contentReference[oaicite:3]{index=3}
+5. When the class becomes available, you should hear the ring and see a notification. :contentReference
 
 ## Customization
 Common tweaks are usually in the JavaScript files (for example, the check interval, which text indicates “full”, and which page URL to monitor).
@@ -65,7 +65,7 @@ Project files (from the repo root):
 - `check.js`, `checker.js`
 - `popup.html`, `popup.js`, `popup.css`
 - `ring.mp3`
-- `icon.png` :contentReference[oaicite:4]{index=4}
+- `icon.png` :contentReference
 
 ## License
 Add a license file if you plan to distribute this publicly (MIT is a common default).
