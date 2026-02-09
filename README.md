@@ -11,7 +11,7 @@ A lightweight browser extension that monitors your PerfectMind badminton class p
 
 ## Key features
 
-<img width="289" height="325" alt="image" src="https://github.com/user-attachments/assets/eaac4769-633a-4b9a-8f0c-3bfa2b3077bf" />
+<img width="284" height="361" alt="image" src="https://github.com/user-attachments/assets/9e88a937-3d98-44b2-9f54-49fe526be8e6" />
 
 - Simple popup UI (start/stop style workflow)
 - Audible alert (ring.mp3) plus browser notification
