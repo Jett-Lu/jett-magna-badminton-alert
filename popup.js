@@ -9,7 +9,24 @@ const linksDiv      = document.getElementById('links');
 const statusP       = document.getElementById('status');
 const lastCheckedP  = document.getElementById('lastChecked');
 
-const api = (typeof browser !== 'undefined') ? browser : chrome;
+/*
+  This popup uses callback-style WebExtension APIs.
+  In Firefox, browser.* is Promise-based, while chrome.* supports callbacks.
+  Prefer chrome if present.
+*/
+const api = (typeof chrome !== 'undefined') ? chrome : browser;
+
+function normalizeUrl(raw) {
+  let url = (raw || '').trim();
+
+  // People sometimes paste an extra trailing underscore
+  while (url.endsWith('_')) url = url.slice(0, -1);
+
+  // Trim common trailing punctuation
+  url = url.replace(/[)\],.]+$/, '');
+
+  return url;
+}
 
 function renderState(state) {
   const links = state.links || [];
@@ -20,7 +37,7 @@ function renderState(state) {
   monitorCount.textContent = `Now monitoring (${links.length}/4):`;
   linksDiv.innerHTML = '';
 
-  links.forEach(url => {
+  links.forEach((url) => {
     const row = document.createElement('div');
     const label = labels[url] || 'Unknown';
 
@@ -68,8 +85,13 @@ function saveIntervalMinutes() {
 }
 
 function addLink() {
-  const url = (linkInput.value || '').trim();
+  const url = normalizeUrl(linkInput.value);
   if (!url) return;
+
+  if (!/^https?:\/\//i.test(url)) {
+    alert('Link must start with http or https.');
+    return;
+  }
 
   api.storage.local.get(['links'], (data) => {
     const links = data.links || [];
@@ -125,38 +147,3 @@ stopBtn.addEventListener('click', stopMonitoring);
 
 loadState();
 api.storage.onChanged.addListener(loadState);
-
-
-});
-
-
-function updateStartStopVisibility(isActive) {
-  const startBtn = document.getElementById('start');
-  const stopBtn = document.getElementById('stop');
-  if (!startBtn || !stopBtn) return;
-
-  if (isActive) {
-    startBtn.style.display = 'none';
-    stopBtn.style.display = 'inline-block';
-  } else {
-    stopBtn.style.display = 'none';
-    startBtn.style.display = 'inline-block';
-  }
-}
-
-function refreshActiveUI() {
-  api.storage.local.get(['active'], (data) => {
-    updateStartStopVisibility(!!data.active);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  refreshActiveUI();
-});
-
-document.getElementById('start')?.addEventListener('click', () => {
-  updateStartStopVisibility(true);
-});
-document.getElementById('stop')?.addEventListener('click', () => {
-  updateStartStopVisibility(false);
-});

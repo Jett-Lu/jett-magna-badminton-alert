@@ -1,6 +1,6 @@
 // background.js
 
-const api = (typeof browser !== 'undefined') ? browser : chrome;
+const api = (typeof chrome !== 'undefined') ? chrome : browser;
 const alarmName = 'poll';
 
 let ringAudio = null;
@@ -8,7 +8,7 @@ let ringAudio = null;
 function startRing() {
   try {
     if (!ringAudio) {
-      ringAudio = new Audio(api.runtime.getURL('audio.mp3'));
+      ringAudio = new Audio(api.runtime.getURL('ring.mp3'));
       ringAudio.loop = true;
     }
     ringAudio.currentTime = 0;
@@ -81,8 +81,8 @@ api.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'start') {
     createOrUpdateAlarm();
     setOnBadge(true);
-    checkLinks();
-  }
+    pollAll();
+}
   if (msg.type === 'stop') {
     api.alarms.clear(alarmName);
     setOnBadge(false);
